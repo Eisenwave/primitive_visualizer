@@ -59,9 +59,18 @@ public class Camera {
         this.z += z;
     }
     
+    public void translateForward(double distance) {
+        double[] xyz = MathUtil.rypToXYZ(distance, Math.toRadians(yaw), Math.toRadians(pitch));
+        translate(xyz[0], xyz[1], xyz[2]);
+    }
+    
+    public void translateBackward(double distance) {
+        translateForward(-distance);
+    }
+    
     public void translateForwardXZ(double distance) {
-        double yawRadians = Math.toRadians(yaw);
-        translate(Math.sin(-yawRadians) * distance, 0, Math.cos(yawRadians) * distance);
+        double[] xz = MathUtil.yawToXZ(Math.toRadians(yaw));
+        translate(xz[0] * distance, 0, xz[1] * distance);
     }
     
     public void translateBackwardXZ(double distance) {
@@ -69,8 +78,8 @@ public class Camera {
     }
     
     public void translateLeftXZ(double distance) {
-        double yawRadians = Math.toRadians(yaw);
-        translate(Math.cos(yawRadians) * distance, 0, -Math.sin(-yawRadians) * distance);
+        double[] xz = MathUtil.yawToXZ(Math.toRadians(yaw));
+        translate(xz[1] * distance, 0, -xz[0] * distance);
     }
     
     public void translateRightXZ(double distance) {

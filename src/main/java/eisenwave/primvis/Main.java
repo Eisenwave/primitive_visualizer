@@ -10,6 +10,8 @@ import org.lwjgl.opengl.DisplayMode;
 import org.lwjgl.util.glu.GLU;
 import org.lwjgl.util.vector.Vector3f;
 
+import java.awt.*;
+
 import static org.lwjgl.opengl.GL11.*;
 
 public class Main {
@@ -24,6 +26,9 @@ public class Main {
     private static long fps;
     
     private static Camera camera;
+    private static TextLayer fpsTextLayer = new TextLayer(8, 8, 80, 48);
+    
+    private final static Font FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     
     public static void main(String[] args) throws Exception {
         System.out.println(System.getProperty("java.library.path"));
@@ -33,7 +38,6 @@ public class Main {
         initDisplay();
         initGL();
         loop();
-        
     }
     
     private static void initDisplay() throws LWJGLException {
@@ -62,6 +66,7 @@ public class Main {
         aspect = (float) width / height;
     
         glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
         if (PERSPECTIVE)
             GLU.gluPerspective(90f, aspect, 0.001f, 100f);
         else
@@ -84,6 +89,7 @@ public class Main {
             
             handleInput();
             render3();
+            render2();
             Display.update();
             Display.sync(FPS);
             
@@ -104,21 +110,23 @@ public class Main {
             camera.translate(0, CAMERA_SPEED, 0);
         if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT))
             camera.translate(0, -CAMERA_SPEED, 0);
+        
         if (Keyboard.isKeyDown(Keyboard.KEY_W))
-            camera.translateForwardXZ(CAMERA_SPEED);
+            camera.translateForward(CAMERA_SPEED);
         if (Keyboard.isKeyDown(Keyboard.KEY_A))
             camera.translateLeftXZ(CAMERA_SPEED);
         if (Keyboard.isKeyDown(Keyboard.KEY_S))
-            camera.translateBackwardXZ(CAMERA_SPEED);
+            camera.translateBackward(CAMERA_SPEED);
         if (Keyboard.isKeyDown(Keyboard.KEY_D))
             camera.translateRightXZ(CAMERA_SPEED);
+        
         if (Keyboard.isKeyDown(Keyboard.KEY_X))
             camera.translate(KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED, 0, 0);
         if (Keyboard.isKeyDown(Keyboard.KEY_Y))
             camera.translate(0, KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED, 0);
         if (Keyboard.isKeyDown(Keyboard.KEY_Z))
             camera.translate(0, 0, KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED);
-        else if (Keyboard.isKeyDown(Keyboard.KEY_C))
+        if (Keyboard.isKeyDown(Keyboard.KEY_C))
             System.out.println(camera);
         
         int dx = Mouse.getDX(), dy = Mouse.getDY();
@@ -135,23 +143,11 @@ public class Main {
     private static void render3() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        //glRotatef(30f, 1, 0, 0);
-        
         glLineWidth(1);
         glColor3f(0.5f, 0.5f, 0.5f);
         drawYGrid(16);
         glLineWidth(5);
         drawCoordinateLines();
-        
-        
-        
-        
-        //glRotatef(rotation += 0.1f, 0, 1, 0);
-        //glTranslatef(0f, 0.0f, -7f);
-        //glColor3f(0.5f, 0.5f, 1.0f);
-        
-        //drawLine(-1, -1, 1, 1);
-        //drawLine(-1, 1, 1, -1);
         
         drawPolygon(ColorUtil.SOLID_RED,
             new Vector3f(-0.5f, -0.5f, -0.5f),
@@ -186,16 +182,37 @@ public class Main {
             new Vector3f(0.5f, 0.5f, 0.5f),
             new Vector3f(-0.5f, 0.5f, 0.5f));
         
-        /*
+        //glMatrixMode(GL_PROJECTION);
+        //glPopMatrix();
+    }
+    
+    private static void render2() {
+        glMatrixMode(GL_PROJECTION);
+        glPushMatrix();
+        glLoadIdentity();
+        GLU.gluOrtho2D(0, Display.getWidth(), Display.getHeight(), 0);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+    
+        glClear(GL_DEPTH_BUFFER_BIT);
+    
+        /* glBegin(GL_QUADS);
+        glColor3f(1, 1, 0);
+        drawRectangle(0, 0, 16, 16);
+        glEnd(); */
         
-        drawLine(10, 10, 100, 100);
-        drawLine(10, 10, 0, 100);
-        
-        drawQuad(100, 100, 100, 200, 200, 200, 200, 100);
-        int w = Display.getWidth(), h = Display.getHeight();
-        glColor3f(1, 0, 0);
-        drawQuad(w - 100, 0, w - 1, 0, w - 1, h - 1, w - 100, h - 1);
-        */
+        glDisable(GL_DEPTH_TEST);
+        //glColor3f(0, 1, 1);
+        fpsTextLayer.print(fps + " FPS", 0, 16, FONT);
+        fpsTextLayer.flushText();
+        glEnable(GL_DEPTH_TEST);
+
+        // Making sure we can render 3d again
+        glMatrixMode(GL_PROJECTION);
+        glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);
+        glPopMatrix();
     }
     
     @SuppressWarnings("SameParameterValue")
@@ -238,6 +255,15 @@ public class Main {
         glBegin(GL_LINES);
         glVertex2i(minX, minY);
         glVertex2i(maxX, maxY);
+        glEnd();
+    }
+    
+    private static void drawRectangle(int minX, int minY, int maxX, int maxY) {
+        glBegin(GL_QUADS);
+        glVertex2i(minX, minY);
+        glVertex2i(minX, maxY);
+        glVertex2i(maxX, maxY);
+        glVertex2i(maxX, minY);
         glEnd();
     }
     
