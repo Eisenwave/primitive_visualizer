@@ -27,6 +27,7 @@ public class Main {
     
     private static Camera camera;
     private static TextLayer fpsTextLayer = new TextLayer(8, 8, 80, 48);
+    private static TextLayer camTextLayer = new TextLayer(8, 32, 140, 100);
     
     private final static Font FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     
@@ -98,7 +99,6 @@ public class Main {
                 fpsTime = now;
                 fps = fpsCounter;
                 fpsCounter = 0;
-                System.out.println(fps + "fps");
             }
         }
         
@@ -203,9 +203,16 @@ public class Main {
         glEnd(); */
         
         glDisable(GL_DEPTH_TEST);
-        //glColor3f(0, 1, 1);
-        fpsTextLayer.print(fps + " FPS", 0, 16, FONT);
+        glColor3f(1, 1, 1);
+        fpsTextLayer.print((fps < 10? "0" + fps : fps) + " FPS", 0, 16, FONT);
         fpsTextLayer.flushText();
+        
+        camTextLayer.print(String.format("X: %.2f", camera.getX()), 0, 16, FONT);
+        camTextLayer.print(String.format("Y: %.2f", camera.getY()), 0, 32, FONT);
+        camTextLayer.print(String.format("Z: %.2f", camera.getZ()), 0, 48, FONT);
+        camTextLayer.print(String.format("Yaw:   %.2f", camera.getYaw()), 0, 64, FONT);
+        camTextLayer.print(String.format("Pitch: %.2f", camera.getPitch()), 0, 80, FONT);
+        camTextLayer.flushText();
         glEnable(GL_DEPTH_TEST);
 
         // Making sure we can render 3d again
