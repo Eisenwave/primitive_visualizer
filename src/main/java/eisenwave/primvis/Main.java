@@ -124,7 +124,7 @@ public class Main {
         int dx = Mouse.getDX(), dy = Mouse.getDY();
         
         if (Mouse.isButtonDown(0)) {
-            camera.rotate(-0.1f * dx, -0.1f * dy);
+            camera.rotate(-0.1f * dx, 0.1f * dy);
         }
     }
     

@@ -86,7 +86,7 @@ public class Camera {
     private void refreshGL() {
         GL11.glMatrixMode(GL11.GL_MODELVIEW);
         GL11.glLoadIdentity();
-        GL11.glRotatef(-pitch, 1, 0, 0);
+        GL11.glRotatef(pitch, 1, 0, 0);
         GL11.glRotatef(yaw + 180, 0, 1, 0);
         GL11.glTranslated(-x, -y, -z);
     }
