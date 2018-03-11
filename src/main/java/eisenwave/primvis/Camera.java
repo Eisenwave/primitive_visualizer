@@ -8,9 +8,22 @@ public class Camera {
     private double x, y, z;
     private float yaw, pitch;
     
-    public Camera(float yaw, float pitch) {
-        this.x = this.y = this.z = 0;
+    public Camera(double x, double y, double z, float yaw, float pitch) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
         setYawPitch(yaw, pitch);
+    }
+    
+    public Camera(float yaw, float pitch) {
+        this(0, 0, 0, yaw, pitch);
+    }
+    
+    public Camera() {
+        this.x = this.y = this.z = 0d;
+        this.yaw = this.pitch = 0f;
+        GL11.glMatrixMode(GL11.GL_MODELVIEW);
+        GL11.glLoadIdentity();
     }
     
     // GETTERS
