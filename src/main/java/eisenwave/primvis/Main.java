@@ -1,98 +1,94 @@
 package eisenwave.primvis;
 
+import eisenwave.primvis.app.*;
 import eisenwave.primvis.util.ColorUtil;
 import eisenwave.primvis.util.KeyboardUtil;
-import org.lwjgl.*;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.*;
-import org.lwjgl.opengl.DisplayMode;
-import org.lwjgl.util.glu.GLU;
-import org.lwjgl.util.vector.Vector3f;
+import eisenwave.primvis.util.MathUtil;
+import eisenwave.torrens.object.Vertex3f;
+import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.glfw.GLFWVidMode;
+import org.lwjgl.opengl.GL;
+import org.lwjgl.system.MemoryStack;
 
-import java.awt.*;
+import java.awt.Font;
+import java.nio.IntBuffer;
+import java.util.Objects;
 
+import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
+// import static org.lwjgl.system.MemoryStack.*;
+import static org.lwjgl.system.MemoryUtil.*;
 
 public class Main {
     
+    private final static boolean VSYNC = true;
     private final static boolean PERSPECTIVE = true;
     private final static int WIDTH = 1280, HEIGHT = 720;
-    private final static int FPS = 60;
-    //private final static int FRAME_DURATION = 1_000_000_000 / FPS;
     private final static float CAMERA_SPEED = 0.1f;
     
-    private static float aspect = (float) WIDTH / HEIGHT;
     private static long fps;
-    
+    public static Window window;
     private static Camera camera;
+    private static Mouse mouse;
+    
     private static TextLayer fpsTextLayer = new TextLayer(8, 8, 80, 48);
     private static TextLayer camTextLayer = new TextLayer(8, 32, 140, 100);
     
     private final static Font FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
+    // private static UnicodeFont SLICK_FONT;
     
     public static void main(String[] args) throws Exception {
-        System.out.println(System.getProperty("java.library.path"));
-        System.setProperty("sun.java2d.noddraw", Boolean.TRUE.toString());
+        // System.out.println(System.getProperty("java.library.path"));
+        //System.setProperty("sun.java2d.noddraw", Boolean.TRUE.toString());
         //System.out.println("Hello LWJGL " + getVersion() + "!");
         
-        initDisplay();
-        initGL();
+        init();
         loop();
+        destroy();
     }
     
-    private static void initDisplay() throws LWJGLException {
-        Display.create();
-        Display.setDisplayMode(new DisplayMode(WIDTH, HEIGHT));
-        Display.setTitle("Primitive Visualizer");
-        Display.setVSyncEnabled(true);
-        Display.setResizable(true);
-    }
+    /* private static void initFonts() throws SlickException {
+        SLICK_FONT = new org.newdawn.slick.UnicodeFont(FONT);
+        SLICK_FONT.addAsciiGlyphs();
+        //noinspection unchecked
+        SLICK_FONT.getEffects().add(new ColorEffect());
+        SLICK_FONT.loadGlyphs();
+    } */
     
-    private static void initGL() {
-        glClearColor(0.1f, 0.1f, 0.1f, 1f);
-        glClearDepth(1.0f);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-        glEnable(GL_LINE_SMOOTH);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glEnable(GL_BLEND);
+    private static void init() {
+        GLFWErrorCallback.createPrint(System.err).set();
         
-        camera = new Camera(0, 0);
-        handleResize();
-    }
-    
-    private static void handleResize() {
-        int width = Display.getWidth(), height = Display.getHeight();
-        aspect = (float) width / height;
-    
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        if (PERSPECTIVE)
-            GLU.gluPerspective(90f, aspect, 0.001f, 100f);
-        else
-            GL11.glOrtho(-aspect, aspect, -1, 1, 0.001f, 100f);
+        if (!glfwInit())
+            throw new IllegalStateException("Unable to initialize GLFW");
         
-        glViewport(0, 0, width, height);
+        initGLFW();
+        initInput();
+        initGL();
+        //initFonts();
     }
     
     private static void loop() {
         //long lastDrawTime = System.nanoTime();
+        
         long fpsTime = System.nanoTime();
         int fpsCounter = 0;
         
-        while (shouldContinue()) {
+        //while (!glfwWindowShouldClose(window)) {
+        while (!glfwWindowShouldClose(window.getId())) {
+            glfwPollEvents();
+            handleInput();
+            
+            /* if (windowDragged) {
+                windowDragged = false;
+                Thread.sleep(20);
+                continue;
+            }*/
+            
             long now = System.nanoTime();
             
-            if (Display.wasResized()) {
-                handleResize();
-            }
-            
-            handleInput();
             render3();
             render2();
-            Display.update();
-            Display.sync(FPS);
+            glfwSwapBuffers(window.getId());
             
             fpsCounter++;
             if (now - fpsTime >= 1_000_000_000) {
@@ -101,47 +97,193 @@ public class Main {
                 fpsCounter = 0;
             }
         }
-        
-        Display.destroy();
     }
     
-    private static void handleInput() {
-        if (Keyboard.isKeyDown(Keyboard.KEY_SPACE))
-            camera.translate(0, CAMERA_SPEED, 0);
-        if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT))
-            camera.translate(0, -CAMERA_SPEED, 0);
+    private static void destroy() {
+        // Free the window callbacks and destroy the window
+        //  glfwFreeCallbacks(window);
+        glfwDestroyWindow(window.getId());
         
-        if (Keyboard.isKeyDown(Keyboard.KEY_W))
-            camera.translateForward(CAMERA_SPEED);
-        if (Keyboard.isKeyDown(Keyboard.KEY_A))
-            camera.translateLeftXZ(CAMERA_SPEED);
-        if (Keyboard.isKeyDown(Keyboard.KEY_S))
-            camera.translateBackward(CAMERA_SPEED);
-        if (Keyboard.isKeyDown(Keyboard.KEY_D))
-            camera.translateRightXZ(CAMERA_SPEED);
+        // Terminate GLFW and free the error callback
+        glfwTerminate();
+        Objects.requireNonNull(glfwSetErrorCallback(null)).free();
+    }
+    
+    private static void initGLFW() {
+        glfwDefaultWindowHints(); // optional, the current window hints are already the default
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // the window will stay hidden after creation
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // the window will be resizable
         
-        if (Keyboard.isKeyDown(Keyboard.KEY_X))
-            camera.translate(KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED, 0, 0);
-        if (Keyboard.isKeyDown(Keyboard.KEY_Y))
-            camera.translate(0, KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED, 0);
-        if (Keyboard.isKeyDown(Keyboard.KEY_Z))
-            camera.translate(0, 0, KeyboardUtil.isControlDown()? -CAMERA_SPEED : CAMERA_SPEED);
-        if (Keyboard.isKeyDown(Keyboard.KEY_C))
-            System.out.println(camera);
+        long windowId = glfwCreateWindow(WIDTH, HEIGHT, "Primitive Visualizer", NULL, NULL);
+        if (windowId == NULL)
+            throw new RuntimeException("Failed to create the GLFW window");
+        window = new Window(windowId, WIDTH, HEIGHT);
         
-        int dx = Mouse.getDX(), dy = Mouse.getDY();
+        // Get the thread stack and push a new frame
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            IntBuffer pWidth = stack.mallocInt(1); // int*
+            IntBuffer pHeight = stack.mallocInt(1); // int*
+            
+            // Get the window size passed to glfwCreateWindow
+            glfwGetWindowSize(windowId, pWidth, pHeight);
+            
+            // Get the resolution of the primary monitor
+            GLFWVidMode videoMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+            if (videoMode == null)
+                throw new RuntimeException("failed to get primary monitor resolution");
+            
+            // Center the window
+            glfwSetWindowPos(
+                window.getId(),
+                (videoMode.width() - pWidth.get(0)) / 2,
+                (videoMode.height() - pHeight.get(0)) / 2
+            );
+        }
         
-        if (Mouse.isButtonDown(0)) {
-            camera.rotate(-0.1f * dx, 0.1f * dy);
+        // Make the OpenGL context current
+        glfwMakeContextCurrent(window.getId());
+        
+        // Make the window visible
+        glfwShowWindow(window.getId());
+    }
+    
+    private static void initGL() {
+        GL.createCapabilities();
+        glClearColor(0.1f, 0.1f, 0.1f, 1f);
+        glClearDepth(1.0f);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
+        glEnable(GL_LINE_SMOOTH);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_BLEND);
+        
+        // Enable v-sync
+        glfwSwapInterval(VSYNC? 1 : 0);
+        
+        camera = new Camera(window, Projection.PERSPECTIVE, 0, 0, 70);
+        handleResize(window.getId(), WIDTH, HEIGHT);
+    }
+    
+    @SuppressWarnings("unused")
+    private static void handleResize(long window, int width, int height) {
+        if (window == Main.window.getId()) {
+            float aspect = (float) width / height;
+            
+            camera.refreshProjection();
+            
+            glViewport(0, 0, width, height);
+            
+            Main.window.setSize(width, height);
         }
     }
     
+    @SuppressWarnings("unused")
+    private static void handleKey(long window, int key, int scancode, int action, int mods) {
+        //System.out.println(key);
+        if (action == GLFW_PRESS) switch (key) {
+            case GLFW_KEY_C:
+                System.out.println(camera);
+                break;
+            
+            case GLFW_KEY_F:
+                System.out.println("FPS = " + fps);
+                break;
+                
+            case GLFW_KEY_ESCAPE:
+                glfwSetWindowShouldClose(Main.window.getId(), true);
+                break;
+        }
+        
+        /*
+        if (Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT))
+            camera.translate(0, -CAMERA_SPEED, 0);
+         */
+    }
+    
+    @SuppressWarnings("unused")
+    private static void handleMouseButton(long window, int button, int action, int mods) {
+        mouse.setLeftDown(action != GLFW_RELEASE);
+    }
+    
+    private static void handleMousePos(long window, double x, double y) {
+        // System.out.println(x + " " + y);
+        
+        if (window == Main.window.getId()) {
+            if (mouse.isLeftDown()) {
+                double dx = x - mouse.getX();
+                double dy = y - mouse.getY();
+                
+                camera.rotate(-0.1f * (float) dx, -0.1f * (float) dy);
+            }
+            
+            mouse.setPos(x, y);
+        }
+    }
+    
+    private static void handleInput() {
+        long windowId = window.getId();
+        
+        if (glfwGetKey(windowId, GLFW_KEY_SPACE) == GLFW_PRESS)
+            camera.translate(0, CAMERA_SPEED, 0);
+        
+        if (KeyboardUtil.isShiftDown(windowId))
+            camera.translate(0, -CAMERA_SPEED, 0);
+        
+        if (glfwGetKey(windowId, GLFW_KEY_W) == GLFW_PRESS)
+            camera.translateForwardXZ(CAMERA_SPEED);
+        
+        if (glfwGetKey(windowId, GLFW_KEY_A) == GLFW_PRESS)
+            camera.translateLeftXZ(CAMERA_SPEED);
+        
+        if (glfwGetKey(windowId, GLFW_KEY_S) == GLFW_PRESS)
+            camera.translateBackwardXZ(CAMERA_SPEED);
+        
+        if (glfwGetKey(windowId, GLFW_KEY_D) == GLFW_PRESS)
+            camera.translateRightXZ(CAMERA_SPEED);
+        
+        //if (glfwGetKey(window, GLFW_KEY_PERIOD) == GLFW_PRESS)
+        //    System.out.println('.');
+    }
+    
+    private static void handleScroll(long windowId, @SuppressWarnings("unused") double dx, double dy) {
+        if (windowId == window.getId()) {
+            //System.out.println(dy);
+            float newFov = MathUtil.clamp(30, camera.getFieldOfView() - 3 * (float) dy, 120);
+            //System.out.println(camera.getFieldOfView() + " -> " + newFov);
+            camera.setFieldOfView(newFov);
+        }
+    }
+    
+    /* @SuppressWarnings("unused")
+    private static void handleWindowPos(long window, double x, double y) {
+        // System.out.println(x + " " + y);
+        
+        windowDragged = true;
+    } */
+    
+    private static void initInput() {
+        long windowId = window.getId();
+        
+        mouse = new Mouse();
+        
+        glfwSetKeyCallback(windowId, Main::handleKey);
+        glfwSetMouseButtonCallback(windowId, Main::handleMouseButton);
+        glfwSetCursorPosCallback(windowId, Main::handleMousePos);
+        glfwSetWindowSizeCallback(windowId, Main::handleResize);
+        glfwSetScrollCallback(windowId, Main::handleScroll);
+        //glfwSetWindowPosCallback(window, Main::handleWindowPos);
+    }
+    
+    /*
     private static boolean shouldContinue() {
         return !Display.isCloseRequested() && !Keyboard.isKeyDown(Keyboard.KEY_ESCAPE);
     }
+    */
     
     private static void render3() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        
+        glDisable(GL_TEXTURE_2D);
         
         glLineWidth(1);
         glColor3f(0.5f, 0.5f, 0.5f);
@@ -150,37 +292,37 @@ public class Main {
         drawCoordinateLines();
         
         drawPolygon(ColorUtil.SOLID_RED,
-            new Vector3f(-0.5f, -0.5f, -0.5f),
-            new Vector3f(-0.5f, -0.5f, 0.5f),
-            new Vector3f(-0.5f, 0.5f, 0.5f),
-            new Vector3f(-0.5f, 0.5f, -0.5f));
+            new Vertex3f(-0.5f, -0.5f, -0.5f),
+            new Vertex3f(-0.5f, -0.5f, 0.5f),
+            new Vertex3f(-0.5f, 0.5f, 0.5f),
+            new Vertex3f(-0.5f, 0.5f, -0.5f));
         drawPolygon(ColorUtil.SOLID_CYAN,
-            new Vector3f(0.5f, -0.5f, -0.5f),
-            new Vector3f(0.5f, 0.5f, -0.5f),
-            new Vector3f(0.5f, 0.5f, 0.5f),
-            new Vector3f(0.5f, -0.5f, 0.5f));
+            new Vertex3f(0.5f, -0.5f, -0.5f),
+            new Vertex3f(0.5f, 0.5f, -0.5f),
+            new Vertex3f(0.5f, 0.5f, 0.5f),
+            new Vertex3f(0.5f, -0.5f, 0.5f));
         
         drawPolygon(ColorUtil.SOLID_GREEN,
-            new Vector3f(-0.5f, -0.5f, -0.5f),
-            new Vector3f(0.5f, -0.5f, -0.5f),
-            new Vector3f(0.5f, -0.5f, 0.5f),
-            new Vector3f(-0.5f, -0.5f, 0.5f));
+            new Vertex3f(-0.5f, -0.5f, -0.5f),
+            new Vertex3f(0.5f, -0.5f, -0.5f),
+            new Vertex3f(0.5f, -0.5f, 0.5f),
+            new Vertex3f(-0.5f, -0.5f, 0.5f));
         drawPolygon(ColorUtil.SOLID_MAGENTA,
-            new Vector3f(-0.5f, 0.5f, -0.5f),
-            new Vector3f(-0.5f, 0.5f, 0.5f),
-            new Vector3f(0.5f, 0.5f, 0.5f),
-            new Vector3f(0.5f, 0.5f, -0.5f));
-    
+            new Vertex3f(-0.5f, 0.5f, -0.5f),
+            new Vertex3f(-0.5f, 0.5f, 0.5f),
+            new Vertex3f(0.5f, 0.5f, 0.5f),
+            new Vertex3f(0.5f, 0.5f, -0.5f));
+        
         drawPolygon(ColorUtil.SOLID_BLUE,
-            new Vector3f(-0.5f, -0.5f, -0.5f),
-            new Vector3f(-0.5f, 0.5f, -0.5f),
-            new Vector3f(0.5f, 0.5f, -0.5f),
-            new Vector3f(0.5f, -0.5f, -0.5f));
+            new Vertex3f(-0.5f, -0.5f, -0.5f),
+            new Vertex3f(-0.5f, 0.5f, -0.5f),
+            new Vertex3f(0.5f, 0.5f, -0.5f),
+            new Vertex3f(0.5f, -0.5f, -0.5f));
         drawPolygon(ColorUtil.SOLID_YELLOW,
-            new Vector3f(-0.5f, -0.5f, 0.5f),
-            new Vector3f(0.5f, -0.5f, 0.5f),
-            new Vector3f(0.5f, 0.5f, 0.5f),
-            new Vector3f(-0.5f, 0.5f, 0.5f));
+            new Vertex3f(-0.5f, -0.5f, 0.5f),
+            new Vertex3f(0.5f, -0.5f, 0.5f),
+            new Vertex3f(0.5f, 0.5f, 0.5f),
+            new Vertex3f(-0.5f, 0.5f, 0.5f));
         
         //glMatrixMode(GL_PROJECTION);
         //glPopMatrix();
@@ -190,36 +332,41 @@ public class Main {
         glMatrixMode(GL_PROJECTION);
         glPushMatrix();
         glLoadIdentity();
-        GLU.gluOrtho2D(0, Display.getWidth(), Display.getHeight(), 0);
+        glOrtho(0, window.getWidth(), window.getHeight(), 0, -1, 1);
         glMatrixMode(GL_MODELVIEW);
         glPushMatrix();
         glLoadIdentity();
-    
+        
         glClear(GL_DEPTH_BUFFER_BIT);
-    
         /* glBegin(GL_QUADS);
         glColor3f(1, 1, 0);
         drawRectangle(0, 0, 16, 16);
         glEnd(); */
         
         glDisable(GL_DEPTH_TEST);
-        glColor3f(1, 1, 1);
-        fpsTextLayer.print((fps < 10? "0" + fps : fps) + " FPS", 0, 16, FONT);
-        fpsTextLayer.flushText();
+        drawString(0, 0, 0xFFFFFF00, (fps < 10? "0" + fps : fps) + " FPS");
         
-        camTextLayer.print(String.format("X: %.2f", camera.getX()), 0, 16, FONT);
-        camTextLayer.print(String.format("Y: %.2f", camera.getY()), 0, 32, FONT);
-        camTextLayer.print(String.format("Z: %.2f", camera.getZ()), 0, 48, FONT);
-        camTextLayer.print(String.format("Yaw:   %.2f", camera.getYaw()), 0, 64, FONT);
-        camTextLayer.print(String.format("Pitch: %.2f", camera.getPitch()), 0, 80, FONT);
-        camTextLayer.flushText();
+        drawFormatString(0, 16, 0xFF7F7F7F, "X: %.2f", camera.getX());
+        drawFormatString(0, 32, 0xFF7F7F7F, "Y: %.2f", camera.getY());
+        drawFormatString(0, 48, 0xFF7F7F7F, "Z: %.2f", camera.getZ());
+        drawFormatString(0, 64, 0xFF7F7F7F, "Yaw:   %.2f", camera.getYaw());
+        drawFormatString(0, 80, 0xFF7F7F7F, "Pitch: %.2f", camera.getPitch());
+        
         glEnable(GL_DEPTH_TEST);
-
+        
         // Making sure we can render 3d again
         glMatrixMode(GL_PROJECTION);
         glPopMatrix();
         glMatrixMode(GL_MODELVIEW);
         glPopMatrix();
+    }
+    
+    private static void drawFormatString(int x, int y, int rgb, String str, Object... args) {
+        drawString(x, y, rgb, String.format(str, args));
+    }
+    
+    private static void drawString(int x, int y, int rgb, String str) {
+        //SLICK_FONT.drawString(x, y, str, color);
     }
     
     @SuppressWarnings("SameParameterValue")
@@ -241,10 +388,10 @@ public class Main {
         drawLine(0, 0, 0, 0, 0, 1);
     }
     
-    private static void drawPolygon(int rgb, Vector3f... vectors) {
+    private static void drawPolygon(int rgb, Vertex3f... vectors) {
         glBegin(GL_QUADS);
         colorRGB(rgb);
-        for (Vector3f v : vectors)
+        for (Vertex3f v : vectors)
             glVertex3f(v.getX(), v.getY(), v.getZ());
         glEnd();
     }
@@ -266,16 +413,11 @@ public class Main {
     }
     
     private static void drawRectangle(int minX, int minY, int maxX, int maxY) {
-        glBegin(GL_QUADS);
-        glVertex2i(minX, minY);
-        glVertex2i(minX, maxY);
-        glVertex2i(maxX, maxY);
-        glVertex2i(maxX, minY);
-        glEnd();
+        drawQuad(minX, minY, minX, maxY, maxX, maxY, maxX, minY);
     }
     
     private static void drawQuad(int ax, int ay, int bx, int by, int cx, int cy, int dx, int dy) {
-        glBegin(GL_POLYGON);
+        glBegin(GL_QUADS);
         glVertex2i(ax, ay);
         glVertex2i(bx, by);
         glVertex2i(cx, cy);

@@ -37,4 +37,12 @@ public final class MathUtil {
         }
     }
     
+    public static double clamp(double min, double value, double max) {
+        return value < min? min : value > max? max : value;
+    }
+    
+    public static float clamp(float min, float value, float max) {
+        return value < min? min : value > max? max : value;
+    }
+    
 }

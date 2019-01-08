@@ -1,32 +1,40 @@
-package eisenwave.primvis;
+package eisenwave.primvis.app;
 
 import eisenwave.primvis.util.MathUtil;
 import org.lwjgl.opengl.GL11;
 
+import static eisenwave.primvis.gl.GLU.gluPerspective;
+import static org.lwjgl.opengl.GL11.*;
+
 public class Camera {
     
+    private final Window window;
+    
+    private Projection projection;
     private double x, y, z;
     private float yaw, pitch;
+    private float fov;
     
-    public Camera(double x, double y, double z, float yaw, float pitch) {
+    public Camera(Window window, Projection projection, double x, double y, double z,
+                  float yaw, float pitch, float fov) {
+        this.window = window;
+        this.projection = projection;
         this.x = x;
         this.y = y;
         this.z = z;
+        this.fov = fov;
         setYawPitch(yaw, pitch);
     }
     
-    public Camera(float yaw, float pitch) {
-        this(0, 0, 0, yaw, pitch);
-    }
-    
-    public Camera() {
-        this.x = this.y = this.z = 0d;
-        this.yaw = this.pitch = 0f;
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glLoadIdentity();
+    public Camera(Window window, Projection projection, float yaw, float pitch, float fov) {
+        this(window, projection, 0, 0, 0, yaw, pitch, fov);
     }
     
     // GETTERS
+    
+    public Projection getProjection() {
+        return projection;
+    }
     
     public double getX() {
         return x;
@@ -48,7 +56,18 @@ public class Camera {
         return pitch;
     }
     
+    public float getFieldOfView() {
+        return fov;
+    }
+    
     // MUTATORS
+    
+    public void setFieldOfView(float fov) {
+        if (fov <= 0)
+            throw new IllegalArgumentException("FOV must be > 0");
+        this.fov = fov;
+        refreshProjection();
+    }
     
     public void translate(double x, double y, double z) {
         GL11.glMatrixMode(GL11.GL_MODELVIEW);
@@ -95,22 +114,33 @@ public class Camera {
         this.y = y;
         this.z = z;
         
-        refreshGL();
+        refreshModelView();
     }
     
     public void setYawPitch(float yaw, float pitch) {
         this.yaw = MathUtil.normalize360(yaw);
         this.pitch = Math.max(-90, Math.min(90, pitch));
         
-        refreshGL();
+        refreshModelView();
     }
     
-    private void refreshGL() {
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glLoadIdentity();
-        GL11.glRotatef(pitch, 1, 0, 0);
-        GL11.glRotatef(yaw + 180, 0, 1, 0);
-        GL11.glTranslated(-x, -y, -z);
+    public void refreshModelView() {
+        glMatrixMode(GL11.GL_MODELVIEW);
+        glLoadIdentity();
+        
+        glRotatef(pitch, 1, 0, 0);
+        glRotatef(yaw + 180, 0, 1, 0);
+        glTranslated(-x, -y, -z);
+    }
+    
+    public void refreshProjection() {
+        glMatrixMode(GL11.GL_PROJECTION);
+        glLoadIdentity();
+        float aspect = window.getAspectRatio();
+        if (projection == Projection.PERSPECTIVE)
+            gluPerspective((float) Math.toRadians(fov), window.getAspectRatio(), 0.001f, 100f);
+        else if (projection == Projection.ORTHOGONAL)
+            glOrtho(-aspect, aspect, -1, 1, 0.001f, 100f);
     }
     
     @Override
