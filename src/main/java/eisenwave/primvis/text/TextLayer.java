@@ -1,4 +1,4 @@
-package eisenwave.primvis;
+package eisenwave.primvis.text;
 
 import eisenwave.primvis.util.ColorUtil;
 import org.lwjgl.BufferUtils;

@@ -1,18 +1,30 @@
 package eisenwave.primvis;
 
 import eisenwave.primvis.app.*;
+import eisenwave.primvis.app.Window;
+import eisenwave.primvis.text.TextLayer;
+import eisenwave.primvis.text.TrueType;
 import eisenwave.primvis.util.ColorUtil;
 import eisenwave.primvis.util.KeyboardUtil;
 import eisenwave.primvis.util.MathUtil;
+import eisenwave.primvis.util.TextUtil;
 import eisenwave.torrens.object.Vertex3f;
+import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFWErrorCallback;
 import org.lwjgl.glfw.GLFWVidMode;
 import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryStack;
 
-import java.awt.Font;
-import java.nio.IntBuffer;
-import java.util.Objects;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
@@ -22,7 +34,6 @@ import static org.lwjgl.system.MemoryUtil.*;
 public class Main {
     
     private final static boolean VSYNC = true;
-    private final static boolean PERSPECTIVE = true;
     private final static int WIDTH = 1280, HEIGHT = 720;
     private final static float CAMERA_SPEED = 0.1f;
     
@@ -34,8 +45,31 @@ public class Main {
     private static TextLayer fpsTextLayer = new TextLayer(8, 8, 80, 48);
     private static TextLayer camTextLayer = new TextLayer(8, 32, 140, 100);
     
-    private final static Font FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
-    // private static UnicodeFont SLICK_FONT;
+    private static TrueType dejaVuSansMono;
+    
+    // allocate one MiB
+    private final static int BITMAP_WIDTH = 512, BITMAP_HEIGHT = 512;
+    
+    // ASCII 32..126 is 95 glyphs
+    //GLuint ftex;
+    
+    private static int[] pixelBufferFromRGB(ByteBuffer buffer) {
+        int[] result = new int[buffer.limit() / 3];
+        for (int i = 0, j = 0; i < result.length; i++) {
+            result[i] = ColorUtil.fromRGB(
+                buffer.get(j++),
+                buffer.get(j++),
+                buffer.get(j++));
+        }
+        return result;
+    }
+    
+    private static int[] toInts(ByteBuffer bytes) {
+        int[] result = new int[bytes.capacity()];
+        for (int i = 0; i < result.length; i++)
+            result[i] = bytes.get(i);
+        return result;
+    }
     
     public static void main(String[] args) throws Exception {
         // System.out.println(System.getProperty("java.library.path"));
@@ -55,7 +89,7 @@ public class Main {
         SLICK_FONT.loadGlyphs();
     } */
     
-    private static void init() {
+    private static void init() throws IOException {
         GLFWErrorCallback.createPrint(System.err).set();
         
         if (!glfwInit())
@@ -64,6 +98,7 @@ public class Main {
         initGLFW();
         initInput();
         initGL();
+        initFonts();
         //initFonts();
     }
     
@@ -154,14 +189,47 @@ public class Main {
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
         glEnable(GL_LINE_SMOOTH);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         
         // Enable v-sync
         glfwSwapInterval(VSYNC? 1 : 0);
         
         camera = new Camera(window, Projection.PERSPECTIVE, 0, 0, 70);
         handleResize(window.getId(), WIDTH, HEIGHT);
+    }
+    
+    private static void initFonts() throws IOException {
+        //int index = stbtt_FindMatchingFont(ttf_buffer, "monospaced", STBTT_MACSTYLE_NONE);
+        ByteBuffer ttf;
+        
+        Path path = TextUtil.getFontFile("dejavu/DejaVuSansMono").toPath();
+        try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+            Files.copy(path, stream);
+            byte[] bytes = stream.toByteArray();
+            ttf = BufferUtils.createByteBuffer(bytes.length);
+            ttf.put(bytes);
+        }
+        //System.out.println(ttf.position());
+        ttf.flip();
+        //printFile(ttf, "ttf", ".tff");
+    
+        dejaVuSansMono = new TrueType(ttf, BITMAP_WIDTH, BITMAP_HEIGHT, 16);
+    }
+    
+    private static void printFile(ByteBuffer buffer, String prefix, String suffix) throws IOException {
+        try (FileOutputStream stream = new FileOutputStream(File.createTempFile(prefix, suffix))) {
+            byte[] bytes = new byte[buffer.capacity()];
+            buffer.get(bytes);
+            buffer.flip();
+            stream.write(bytes);
+        }
+    }
+    
+    private static void printGrayScaleBuffer(ByteBuffer buffer, String prefix) throws IOException {
+        BufferedImage image = new BufferedImage(512, 512, BufferedImage.TYPE_BYTE_GRAY);
+        image.setRGB(0, 0, 512, 512, toInts(buffer), 0, 512);
+        ImageIO.write(image, "bmp", File.createTempFile(prefix, ".bmp"));
     }
     
     @SuppressWarnings("unused")
@@ -188,7 +256,7 @@ public class Main {
             case GLFW_KEY_F:
                 System.out.println("FPS = " + fps);
                 break;
-                
+            
             case GLFW_KEY_ESCAPE:
                 glfwSetWindowShouldClose(Main.window.getId(), true);
                 break;
@@ -282,7 +350,6 @@ public class Main {
     
     private static void render3() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
         glDisable(GL_TEXTURE_2D);
         
         glLineWidth(1);
@@ -338,19 +405,20 @@ public class Main {
         glLoadIdentity();
         
         glClear(GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
         /* glBegin(GL_QUADS);
         glColor3f(1, 1, 0);
         drawRectangle(0, 0, 16, 16);
         glEnd(); */
         
-        glDisable(GL_DEPTH_TEST);
-        drawString(0, 0, 0xFFFFFF00, (fps < 10? "0" + fps : fps) + " FPS");
+        glColor3f(1, 0, 0);
+        //drawQuad(0, 0, 0, 16, 16, 16, 16, 0);
         
-        drawFormatString(0, 16, 0xFF7F7F7F, "X: %.2f", camera.getX());
-        drawFormatString(0, 32, 0xFF7F7F7F, "Y: %.2f", camera.getY());
-        drawFormatString(0, 48, 0xFF7F7F7F, "Z: %.2f", camera.getZ());
-        drawFormatString(0, 64, 0xFF7F7F7F, "Yaw:   %.2f", camera.getYaw());
-        drawFormatString(0, 80, 0xFF7F7F7F, "Pitch: %.2f", camera.getPitch());
+        //TextUtil.renderTextBitmap(dejaVuSansMono, 256, 256);
+        drawString(0, 0, 0xFFFF00, (fps < 10? "0" + fps : fps) + " FPS");
+        
+        drawFormatString(32, 32, 0x7F7F7F, "X: %.2f\nY: %.2f\nZ: %.2f\nYaw:   %.2f\nPitch: %.2f",
+            camera.getX(), camera.getY(), camera.getZ(), camera.getYaw(), camera.getPitch());
         
         glEnable(GL_DEPTH_TEST);
         
@@ -367,6 +435,8 @@ public class Main {
     
     private static void drawString(int x, int y, int rgb, String str) {
         //SLICK_FONT.drawString(x, y, str, color);
+        colorRGB(rgb);
+        TextUtil.printTextAtCoordinates(dejaVuSansMono, x, y, str);
     }
     
     @SuppressWarnings("SameParameterValue")
